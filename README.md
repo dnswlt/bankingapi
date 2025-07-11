@@ -4,7 +4,7 @@ Go implementation of banking APIs.
 
 ## Overview
 
-This library provides Go bindings for the comdirect REST API. You can use it 
+This library provides Go bindings for the comdirect REST API. You can use it
 to retrieve your account balances, depot positions, and more.
 
 NOTE: All operations provided by this library are read-only. This library does
@@ -57,11 +57,15 @@ The model classes for the REST API were generated from the Swagger schema
 provided by comdirect (see [./comdirect/swagger](./comdirect/swagger/)).
 
 ```bash
-openapi-generator generate \                                      
+openapi-generator generate \
   -i comdirect/swagger/comdirect_rest_api_swagger.json \
   -g go \
   -o ./comdirect --api-package comdirect
+
+# Fix package name
+sed -i '' -e 's/^package openapi$/package comdirect/' comdirect/*.go
 ```
 
-Some adaptations were necessary to make things work. All modified model files have an
+Some adaptations were necessary to make things work, so just re-running
+`openapi-generator` will break things. All modified model files have an
 associated `_test.go` file.
