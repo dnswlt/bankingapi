@@ -12,6 +12,7 @@ package comdirect
 
 import (
 	"encoding/json"
+	"strings"
 )
 
 // checks if the AccountTransaction type satisfies the MappedNullable interface at compile time
@@ -22,12 +23,12 @@ type AccountTransaction struct {
 	// unique reference code of the transaction
 	Reference *string `json:"reference,omitempty"`
 	// Status of transaction
-	BookingStatus *string `json:"bookingStatus,omitempty"`
-	BookingDate *DateString `json:"bookingDate,omitempty"`
-	Amount *AmountValue `json:"amount,omitempty"`
-	Remitter *AccountInformation `json:"remitter,omitempty"`
-	Deptor *AccountInformation `json:"deptor,omitempty"`
-	Creditor *AccountInformation `json:"creditor,omitempty"`
+	BookingStatus *string             `json:"bookingStatus,omitempty"`
+	BookingDate   *DateString         `json:"bookingDate,omitempty"`
+	Amount        *AmountValue        `json:"amount,omitempty"`
+	Remitter      *AccountInformation `json:"remitter,omitempty"`
+	Deptor        *AccountInformation `json:"deptor,omitempty"`
+	Creditor      *AccountInformation `json:"creditor,omitempty"`
 	// Availability date (yyyy-mm-dd). Could be an invalid date e.g. 2019-12-32
 	ValutaDate *string `json:"valutaDate,omitempty"`
 	// Gives back the creditor identifier of an account transaction, if it is a direct debit.
@@ -39,7 +40,7 @@ type AccountTransaction struct {
 	// Shows whether the client has seen the account transaction in web.
 	NewTransaction *bool `json:"newTransaction,omitempty"`
 	// remittance information of the transaction. This can be more then one line with a length of 35 symbols. The lines will be numbered in case of an already booked transaction.
-	RemittanceInfo *string `json:"remittanceInfo,omitempty"`
+	RemittanceInfo  *string   `json:"remittanceInfo,omitempty"`
 	TransactionType *EnumText `json:"transactionType,omitempty"`
 }
 
@@ -453,6 +454,34 @@ func (o *AccountTransaction) GetRemittanceInfo() string {
 	return *o.RemittanceInfo
 }
 
+// GetRemittanceInfoList returns all lines of the remittance info
+// as separate lines. Remittance info uses a special format to
+// encode multi-line text, where each line has a fixed length
+// and starts with the two-digit line number (ex: "01").
+// These line numbers are not part of the returned text.
+func (o *AccountTransaction) GetRemittanceInfoList() []string {
+	s := o.GetRemittanceInfo()
+	if len(s) <= 35 {
+		return []string{s}
+	}
+	// Need to use runes, not bytes: we've seen examples where
+	// remittance info contained umlauts, which were counted
+	// as a single character in this crude encoding.
+	rs := []rune(s)
+	n := (len(rs)-1)/37 + 1
+	lines := make([]string, n)
+	for i := range lines {
+		j := i * 37
+		if j+1 >= len(rs) || rs[j] < '0' || rs[j] > '9' || rs[j+1] < '0' || rs[j+1] > '9' {
+			// Line does not start with expected 2-digit number.
+			return []string{s}
+		}
+		end := min(j+37, len(rs))
+		lines[i] = strings.TrimSpace(string(rs[j+2 : end]))
+	}
+	return lines
+}
+
 // GetRemittanceInfoOk returns a tuple with the RemittanceInfo field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *AccountTransaction) GetRemittanceInfoOk() (*string, bool) {
@@ -509,7 +538,7 @@ func (o *AccountTransaction) SetTransactionType(v EnumText) {
 }
 
 func (o AccountTransaction) MarshalJSON() ([]byte, error) {
-	toSerialize,err := o.ToMap()
+	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
 	}
@@ -598,5 +627,3 @@ func (v *NullableAccountTransaction) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }
-
-

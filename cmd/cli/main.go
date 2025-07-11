@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/dnswlt/bankingapi/comdirect"
@@ -43,23 +43,49 @@ func printBalance(b *comdirect.AccountBalance) {
 	fmt.Printf("%s %s %s\n", iban, name, balance.GetValue())
 }
 
-func printPosition(p *comdirect.DepotPosition) {
-	wkn := p.GetWkn()
-	instr := p.GetInstrument()
-	isin := instr.GetIsin()
-	qty := p.GetQuantity()
-	curPrice := p.GetCurrentPrice()
-	price := curPrice.GetPrice()
-	mktValue := p.GetCurrentValue()
-	fmt.Printf("%s %s %s %s %s\n", wkn, isin, qty.GetValue(), price.GetValue(), mktValue.GetValue())
+func printTransactions(txs []comdirect.AccountTransaction) {
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 4, 1, ' ', 0)
+	for i := range txs {
+		tx := &txs[i]
+		amount := tx.GetAmount()
+		bookingDate := tx.GetBookingDate()
+		remittanceInfoList := tx.GetRemittanceInfoList()
+		remittanceInfo := ""
+		if len(remittanceInfoList) > 0 {
+			remittanceInfo = remittanceInfoList[0]
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t\n",
+			tx.GetBookingStatus(),
+			amount.GetUnit(),
+			amount.GetValue(),
+			bookingDate.GetDate(),
+			remittanceInfo)
+		for _, ri := range remittanceInfoList[1:] {
+			fmt.Fprintf(w, "\t\t\t\t%s\t\n", ri)
+		}
+	}
+	w.Flush()
 }
 
-func printTransaction(t *comdirect.AccountTransaction) {
-	js, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		log.Fatalf("Cannot marshal AccountTransaction: %v", err)
+func printPositions(positions []comdirect.DepotPosition) {
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 4, 1, ' ', tabwriter.AlignRight)
+	fmt.Fprintf(w, "WKN\tISIN\tQty\tPrice\tMkt Value\t\n")
+	for i := range positions {
+		p := &positions[i]
+
+		wkn := p.GetWkn()
+		instr := p.GetInstrument()
+		isin := instr.GetIsin()
+		qty := p.GetQuantity()
+		curPrice := p.GetCurrentPrice()
+		price := curPrice.GetPrice()
+		mktValue := p.GetCurrentValue()
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t\n", wkn, isin, qty.GetValue(), price.GetValue(), mktValue.GetValue())
 	}
-	fmt.Println(string(js))
+	w.Flush()
 }
 
 func main() {
@@ -162,9 +188,8 @@ func main() {
 			log.Printf("Error listing transactions: %v", err)
 			continue
 		}
-		for j := range txs {
-			printTransaction(&txs[j])
-		}
+		printTransactions(txs)
+		fmt.Println()
 	}
 
 	depots, err := c.ListDepots()
@@ -172,16 +197,14 @@ func main() {
 		log.Fatalf("Error listing depots: %v", err)
 	}
 
-	for i, depot := range depots {
-		log.Printf("Listing depot #%d (%s).", i+1, depot.GetDepotDisplayId())
+	for _, depot := range depots {
+		fmt.Printf("Positions for depot %s (%s).\n", depot.GetDepotDisplayId(), depot.GetDepotId())
 		positions, err := c.GetDepotPositions(depot.GetDepotId())
 		if err != nil {
 			log.Printf("Failed to get depot positions: %v", err)
 			continue
 		}
-		for i := range positions {
-			printPosition(&positions[i])
-		}
+		printPositions(positions)
 	}
 
 	if *oAuthTokenPath == "" {
